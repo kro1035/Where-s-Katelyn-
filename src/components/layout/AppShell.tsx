@@ -57,7 +57,7 @@ export function AppShell({ loans, selectedLoanId, activePage, householdId, onSel
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TopBar title={pageTitle} onMenuClick={() => setSidebarOpen(true)} />
+        <TopBar title={pageTitle} onMenuClick={() => setSidebarOpen(true)} onAddLoan={onAddLoan} />
         <main className="flex-1 overflow-y-auto">
           {children}
         </main>

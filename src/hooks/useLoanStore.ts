@@ -43,8 +43,10 @@ export function useLoanStore(householdId: string) {
 
   // Optimistically update local state and persist to Firestore
   const save = useCallback((newStore: LoanStore) => {
-    setStore(newStore)
-    setDoc(doc(db, 'households', householdId), newStore).catch(console.error)
+    // JSON round-trip removes undefined values which Firestore rejects
+    const clean: LoanStore = JSON.parse(JSON.stringify(newStore))
+    setStore(clean)
+    setDoc(doc(db, 'households', householdId), clean).catch(console.error)
   }, [householdId])
 
   const addLoan = useCallback((data: Omit<Loan, 'id' | 'createdAt' | 'updatedAt' | 'currentBalance'>) => {
