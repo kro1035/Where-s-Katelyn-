@@ -9,13 +9,14 @@ interface AppShellProps {
   loans: Loan[]
   selectedLoanId: string | null
   activePage: Page
+  householdId: string
   onSelectLoan: (id: string) => void
   onAddLoan: () => void
   onNavigate: (page: Page) => void
   children: React.ReactNode
 }
 
-export function AppShell({ loans, selectedLoanId, activePage, onSelectLoan, onAddLoan, onNavigate, children }: AppShellProps) {
+export function AppShell({ loans, selectedLoanId, activePage, householdId, onSelectLoan, onAddLoan, onNavigate, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const selectedLoan = loans.find(l => l.id === selectedLoanId)
   const pageTitle = activePage === 'calculator' ? 'Payment Calculator' : (selectedLoan?.name ?? 'Loan Tracker')
@@ -28,6 +29,7 @@ export function AppShell({ loans, selectedLoanId, activePage, onSelectLoan, onAd
           loans={loans}
           selectedLoanId={selectedLoanId}
           activePage={activePage}
+          householdId={householdId}
           onSelectLoan={onSelectLoan}
           onAddLoan={onAddLoan}
           onNavigate={onNavigate}
@@ -43,6 +45,7 @@ export function AppShell({ loans, selectedLoanId, activePage, onSelectLoan, onAd
               loans={loans}
               selectedLoanId={selectedLoanId}
               activePage={activePage}
+              householdId={householdId}
               onSelectLoan={onSelectLoan}
               onAddLoan={onAddLoan}
               onNavigate={onNavigate}

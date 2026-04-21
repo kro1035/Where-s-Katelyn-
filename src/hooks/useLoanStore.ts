@@ -1,7 +1,8 @@
-import { useReducer, useEffect, useState, useCallback } from 'react'
+import { useReducer, useEffect, useState, useCallback, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { doc, setDoc, onSnapshot } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 import type { Loan, Payment, LoanStore } from '@/types'
-import { loadStore, saveStore } from '@/utils/storage'
 import { getCurrentBalance } from '@/utils/financial'
 
 type Action =
@@ -65,32 +66,51 @@ function reducer(state: LoanStore, action: Action): LoanStore {
   }
 }
 
-export function useLoanStore() {
+export function useLoanStore(householdId: string) {
   const [state, dispatch] = useReducer(reducer, { loans: [], payments: [] })
   const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null)
+  const [isLoaded, setIsLoaded] = useState(false)
 
-  // Hydrate from localStorage on mount
-  useEffect(() => {
-    const stored = loadStore()
-    dispatch({ type: 'HYDRATE', payload: stored })
-    if (stored.loans.length === 1) {
-      setSelectedLoanId(stored.loans[0].id)
-    }
-  }, [])
+  // Track the last serialized state we wrote so we can skip our own echoed snapshots
+  const lastWritten = useRef<string>('')
 
-  // Persist on every state change (skip initial empty state)
+  // Subscribe to Firestore in real time
   useEffect(() => {
-    if (state.loans.length > 0 || state.payments.length > 0) {
-      saveStore(state)
-    }
-  }, [state])
+    const ref = doc(db, 'households', householdId)
+    const unsub = onSnapshot(ref, (snap) => {
+      if (!snap.exists()) {
+        setIsLoaded(true)
+        return
+      }
+      const data = snap.data() as LoanStore
+      const serialized = JSON.stringify(data)
 
-  // Auto-select when first loan is added
+      // Skip if this is the echo of our own write
+      if (serialized === lastWritten.current) {
+        setIsLoaded(true)
+        return
+      }
+
+      lastWritten.current = serialized
+      dispatch({ type: 'HYDRATE', payload: data })
+
+      // Auto-select single loan
+      if (data.loans.length === 1) {
+        setSelectedLoanId(id => id ?? data.loans[0].id)
+      }
+      setIsLoaded(true)
+    })
+    return unsub
+  }, [householdId])
+
+  // Persist to Firestore whenever state changes (after initial load)
   useEffect(() => {
-    if (state.loans.length === 1 && selectedLoanId === null) {
-      setSelectedLoanId(state.loans[0].id)
-    }
-  }, [state.loans, selectedLoanId])
+    if (!isLoaded) return
+    const serialized = JSON.stringify(state)
+    if (serialized === lastWritten.current) return
+    lastWritten.current = serialized
+    setDoc(doc(db, 'households', householdId), state).catch(console.error)
+  }, [state, householdId, isLoaded])
 
   const addLoan = useCallback((data: Omit<Loan, 'id' | 'createdAt' | 'updatedAt' | 'currentBalance'>) => {
     const loan: Loan = {
@@ -139,6 +159,7 @@ export function useLoanStore() {
     payments: state.payments,
     selectedLoanId,
     setSelectedLoanId,
+    isLoaded,
     addLoan,
     updateLoan,
     deleteLoan,
