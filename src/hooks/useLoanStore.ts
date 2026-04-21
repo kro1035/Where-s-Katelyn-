@@ -1,111 +1,34 @@
-import { useReducer, useEffect, useState, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { doc, setDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { Loan, Payment, LoanStore } from '@/types'
 import { getCurrentBalance } from '@/utils/financial'
 
-type Action =
-  | { type: 'HYDRATE'; payload: LoanStore }
-  | { type: 'ADD_LOAN'; payload: Loan }
-  | { type: 'UPDATE_LOAN'; payload: Loan }
-  | { type: 'DELETE_LOAN'; payload: string }
-  | { type: 'ADD_PAYMENT'; payload: Payment }
-  | { type: 'DELETE_PAYMENT'; payload: string }
-
-function reducer(state: LoanStore, action: Action): LoanStore {
-  switch (action.type) {
-    case 'HYDRATE':
-      return action.payload
-
-    case 'ADD_LOAN':
-      return { ...state, loans: [...state.loans, action.payload] }
-
-    case 'UPDATE_LOAN':
-      return {
-        ...state,
-        loans: state.loans.map(l => l.id === action.payload.id ? action.payload : l),
-      }
-
-    case 'DELETE_LOAN':
-      return {
-        loans: state.loans.filter(l => l.id !== action.payload),
-        payments: state.payments.filter(p => p.loanId !== action.payload),
-      }
-
-    case 'ADD_PAYMENT': {
-      const payment = action.payload
-      const loan = state.loans.find(l => l.id === payment.loanId)
-      if (!loan) return state
-      const paymentsForLoan = [...state.payments.filter(p => p.loanId === payment.loanId), payment]
-      const newBalance = getCurrentBalance(loan, paymentsForLoan)
-      const updatedLoan: Loan = { ...loan, currentBalance: newBalance, updatedAt: new Date().toISOString() }
-      return {
-        loans: state.loans.map(l => l.id === updatedLoan.id ? updatedLoan : l),
-        payments: [...state.payments, payment],
-      }
-    }
-
-    case 'DELETE_PAYMENT': {
-      const remaining = state.payments.filter(p => p.id !== action.payload)
-      const deleted = state.payments.find(p => p.id === action.payload)
-      if (!deleted) return state
-      const loan = state.loans.find(l => l.id === deleted.loanId)
-      if (!loan) return { ...state, payments: remaining }
-      const paymentsForLoan = remaining.filter(p => p.loanId === loan.id)
-      const newBalance = getCurrentBalance(loan, paymentsForLoan)
-      const updatedLoan: Loan = { ...loan, currentBalance: newBalance, updatedAt: new Date().toISOString() }
-      return {
-        loans: state.loans.map(l => l.id === updatedLoan.id ? updatedLoan : l),
-        payments: remaining,
-      }
-    }
-
-    default:
-      return state
-  }
-}
-
 export function useLoanStore(householdId: string) {
-  const [state, dispatch] = useReducer(reducer, { loans: [], payments: [] })
+  const [store, setStore] = useState<LoanStore>({ loans: [], payments: [] })
   const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const [firestoreError, setFirestoreError] = useState<string | null>(null)
 
-  // Track the last serialized state we wrote so we can skip our own echoed snapshots
-  const lastWritten = useRef<string>('')
-
-  // Subscribe to Firestore in real time
+  // Subscribe to Firestore — single source of truth
   useEffect(() => {
-    // Timeout fallback — if Firestore doesn't respond in 8s, unblock the UI
     const timeout = setTimeout(() => {
       setIsLoaded(true)
       setFirestoreError('Could not connect to Firestore. Check that Firestore Database is created in your Firebase project.')
     }, 8000)
 
-    const ref = doc(db, 'households', householdId)
     const unsub = onSnapshot(
-      ref,
+      doc(db, 'households', householdId),
       (snap) => {
         clearTimeout(timeout)
         setFirestoreError(null)
-        if (!snap.exists()) {
-          setIsLoaded(true)
-          return
-        }
-        const data = snap.data() as LoanStore
-        const serialized = JSON.stringify(data)
-
-        if (serialized === lastWritten.current) {
-          setIsLoaded(true)
-          return
-        }
-
-        lastWritten.current = serialized
-        dispatch({ type: 'HYDRATE', payload: data })
-
-        if (data.loans.length === 1) {
-          setSelectedLoanId(id => id ?? data.loans[0].id)
+        if (snap.exists()) {
+          const data = snap.data() as LoanStore
+          setStore(data)
+          if (data.loans.length === 1) {
+            setSelectedLoanId(id => id ?? data.loans[0].id)
+          }
         }
         setIsLoaded(true)
       },
@@ -118,14 +41,11 @@ export function useLoanStore(householdId: string) {
     return () => { clearTimeout(timeout); unsub() }
   }, [householdId])
 
-  // Persist to Firestore whenever state changes (after initial load)
-  useEffect(() => {
-    if (!isLoaded) return
-    const serialized = JSON.stringify(state)
-    if (serialized === lastWritten.current) return
-    lastWritten.current = serialized
-    setDoc(doc(db, 'households', householdId), state).catch(console.error)
-  }, [state, householdId, isLoaded])
+  // Optimistically update local state and persist to Firestore
+  const save = useCallback((newStore: LoanStore) => {
+    setStore(newStore)
+    setDoc(doc(db, 'households', householdId), newStore).catch(console.error)
+  }, [householdId])
 
   const addLoan = useCallback((data: Omit<Loan, 'id' | 'createdAt' | 'updatedAt' | 'currentBalance'>) => {
     const loan: Loan = {
@@ -135,43 +55,62 @@ export function useLoanStore(householdId: string) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
-    dispatch({ type: 'ADD_LOAN', payload: loan })
+    save({ ...store, loans: [...store.loans, loan] })
     setSelectedLoanId(loan.id)
     return loan
-  }, [])
+  }, [store, save])
 
   const updateLoan = useCallback((loan: Loan) => {
-    dispatch({ type: 'UPDATE_LOAN', payload: { ...loan, updatedAt: new Date().toISOString() } })
-  }, [])
+    const updated = { ...loan, updatedAt: new Date().toISOString() }
+    save({ ...store, loans: store.loans.map(l => l.id === updated.id ? updated : l) })
+  }, [store, save])
 
   const deleteLoan = useCallback((loanId: string) => {
-    dispatch({ type: 'DELETE_LOAN', payload: loanId })
+    save({
+      loans: store.loans.filter(l => l.id !== loanId),
+      payments: store.payments.filter(p => p.loanId !== loanId),
+    })
     setSelectedLoanId(prev => prev === loanId ? null : prev)
-  }, [])
+  }, [store, save])
 
   const addPayment = useCallback((data: Omit<Payment, 'id' | 'createdAt'>) => {
-    const payment: Payment = {
-      ...data,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
-    }
-    dispatch({ type: 'ADD_PAYMENT', payload: payment })
+    const payment: Payment = { ...data, id: uuidv4(), createdAt: new Date().toISOString() }
+    const loan = store.loans.find(l => l.id === data.loanId)
+    if (!loan) return payment
+    const updatedPayments = [...store.payments.filter(p => p.loanId === data.loanId), payment]
+    const newBalance = getCurrentBalance(loan, updatedPayments)
+    const updatedLoan = { ...loan, currentBalance: newBalance, updatedAt: new Date().toISOString() }
+    save({
+      loans: store.loans.map(l => l.id === updatedLoan.id ? updatedLoan : l),
+      payments: [...store.payments, payment],
+    })
     return payment
-  }, [])
+  }, [store, save])
 
   const deletePayment = useCallback((paymentId: string) => {
-    dispatch({ type: 'DELETE_PAYMENT', payload: paymentId })
-  }, [])
+    const payment = store.payments.find(p => p.id === paymentId)
+    if (!payment) return
+    const remaining = store.payments.filter(p => p.id !== paymentId)
+    const loan = store.loans.find(l => l.id === payment.loanId)
+    if (!loan) { save({ ...store, payments: remaining }); return }
+    const paymentsForLoan = remaining.filter(p => p.loanId === loan.id)
+    const newBalance = getCurrentBalance(loan, paymentsForLoan)
+    const updatedLoan = { ...loan, currentBalance: newBalance, updatedAt: new Date().toISOString() }
+    save({
+      loans: store.loans.map(l => l.id === updatedLoan.id ? updatedLoan : l),
+      payments: remaining,
+    })
+  }, [store, save])
 
   const getPaymentsForLoan = useCallback((loanId: string) =>
-    state.payments.filter(p => p.loanId === loanId), [state.payments])
+    store.payments.filter(p => p.loanId === loanId), [store.payments])
 
   const getLoanById = useCallback((loanId: string) =>
-    state.loans.find(l => l.id === loanId), [state.loans])
+    store.loans.find(l => l.id === loanId), [store.loans])
 
   return {
-    loans: state.loans,
-    payments: state.payments,
+    loans: store.loans,
+    payments: store.payments,
     selectedLoanId,
     setSelectedLoanId,
     isLoaded,
