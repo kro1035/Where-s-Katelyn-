@@ -54,6 +54,22 @@ function TrackerApp({ householdId }: { householdId: string }) {
   }
 
   function renderMain() {
+    if (store.firestoreError) {
+      return (
+        <div className="p-6 max-w-lg">
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-5">
+            <p className="text-sm font-semibold text-rose-800 mb-1">Firestore not connected</p>
+            <p className="text-sm text-rose-700 mb-3">{store.firestoreError}</p>
+            <ol className="text-sm text-rose-700 list-decimal list-inside space-y-1">
+              <li>Go to your <strong>Firebase Console</strong></li>
+              <li>Select your project → <strong>Build → Firestore Database</strong></li>
+              <li>Click <strong>Create database</strong> and choose <strong>Start in test mode</strong></li>
+              <li>Refresh this page</li>
+            </ol>
+          </div>
+        </div>
+      )
+    }
     if (!store.isLoaded) {
       return (
         <div className="flex items-center justify-center h-full">
@@ -62,7 +78,7 @@ function TrackerApp({ householdId }: { householdId: string }) {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
-            <span className="text-sm">Loading...</span>
+            <span className="text-sm">Connecting to Firestore…</span>
           </div>
         </div>
       )

@@ -70,37 +70,52 @@ export function useLoanStore(householdId: string) {
   const [state, dispatch] = useReducer(reducer, { loans: [], payments: [] })
   const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
+  const [firestoreError, setFirestoreError] = useState<string | null>(null)
 
   // Track the last serialized state we wrote so we can skip our own echoed snapshots
   const lastWritten = useRef<string>('')
 
   // Subscribe to Firestore in real time
   useEffect(() => {
-    const ref = doc(db, 'households', householdId)
-    const unsub = onSnapshot(ref, (snap) => {
-      if (!snap.exists()) {
-        setIsLoaded(true)
-        return
-      }
-      const data = snap.data() as LoanStore
-      const serialized = JSON.stringify(data)
-
-      // Skip if this is the echo of our own write
-      if (serialized === lastWritten.current) {
-        setIsLoaded(true)
-        return
-      }
-
-      lastWritten.current = serialized
-      dispatch({ type: 'HYDRATE', payload: data })
-
-      // Auto-select single loan
-      if (data.loans.length === 1) {
-        setSelectedLoanId(id => id ?? data.loans[0].id)
-      }
+    // Timeout fallback — if Firestore doesn't respond in 8s, unblock the UI
+    const timeout = setTimeout(() => {
       setIsLoaded(true)
-    })
-    return unsub
+      setFirestoreError('Could not connect to Firestore. Check that Firestore Database is created in your Firebase project.')
+    }, 8000)
+
+    const ref = doc(db, 'households', householdId)
+    const unsub = onSnapshot(
+      ref,
+      (snap) => {
+        clearTimeout(timeout)
+        setFirestoreError(null)
+        if (!snap.exists()) {
+          setIsLoaded(true)
+          return
+        }
+        const data = snap.data() as LoanStore
+        const serialized = JSON.stringify(data)
+
+        if (serialized === lastWritten.current) {
+          setIsLoaded(true)
+          return
+        }
+
+        lastWritten.current = serialized
+        dispatch({ type: 'HYDRATE', payload: data })
+
+        if (data.loans.length === 1) {
+          setSelectedLoanId(id => id ?? data.loans[0].id)
+        }
+        setIsLoaded(true)
+      },
+      (error) => {
+        clearTimeout(timeout)
+        setIsLoaded(true)
+        setFirestoreError(`Firestore error: ${error.message}`)
+      },
+    )
+    return () => { clearTimeout(timeout); unsub() }
   }, [householdId])
 
   // Persist to Firestore whenever state changes (after initial load)
@@ -160,6 +175,7 @@ export function useLoanStore(householdId: string) {
     selectedLoanId,
     setSelectedLoanId,
     isLoaded,
+    firestoreError,
     addLoan,
     updateLoan,
     deleteLoan,
