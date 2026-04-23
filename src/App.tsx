@@ -7,9 +7,10 @@ import { HouseholdSetup, getStoredHouseholdId } from '@/components/household/Hou
 import { HomePage } from '@/pages/HomePage'
 import { LoanDetailPage } from '@/pages/LoanDetailPage'
 import { CalculatorPage } from '@/pages/CalculatorPage'
+import { SchedulePage } from '@/pages/SchedulePage'
 import type { Loan } from '@/types'
 
-type Page = 'detail' | 'calculator'
+type Page = 'detail' | 'calculator' | 'schedule'
 
 function LoanDetail({ loanId, store }: { loanId: string; store: ReturnType<typeof useLoanStore> }) {
   const loan = store.getLoanById(loanId)!
@@ -45,7 +46,7 @@ function LoanCalculator({ loanId, store }: { loanId: string; store: ReturnType<t
 
 function TrackerApp({ householdId }: { householdId: string }) {
   const store = useLoanStore(householdId)
-  const [activePage, setActivePage] = useState<Page>('detail')
+  const [activePage, setActivePage] = useState<Page>('schedule')
   const [addOpen, setAddOpen] = useState(false)
 
   function handleAddLoan(data: Omit<Loan, 'id' | 'createdAt' | 'updatedAt' | 'currentBalance'>) {
@@ -54,6 +55,9 @@ function TrackerApp({ householdId }: { householdId: string }) {
   }
 
   function renderMain() {
+    if (activePage === 'schedule') {
+      return <SchedulePage />
+    }
     if (store.firestoreError) {
       return (
         <div className="p-6 max-w-lg">

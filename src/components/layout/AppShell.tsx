@@ -3,7 +3,7 @@ import type { Loan } from '@/types'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 
-type Page = 'detail' | 'calculator'
+type Page = 'detail' | 'calculator' | 'schedule'
 
 interface AppShellProps {
   loans: Loan[]
@@ -19,7 +19,7 @@ interface AppShellProps {
 export function AppShell({ loans, selectedLoanId, activePage, householdId, onSelectLoan, onAddLoan, onNavigate, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const selectedLoan = loans.find(l => l.id === selectedLoanId)
-  const pageTitle = activePage === 'calculator' ? 'Payment Calculator' : (selectedLoan?.name ?? 'Loan Tracker')
+  const pageTitle = activePage === 'schedule' ? 'Daily Schedule' : activePage === 'calculator' ? 'Payment Calculator' : (selectedLoan?.name ?? 'Loan Tracker')
 
   return (
     <div className="flex h-screen bg-slate-50">
