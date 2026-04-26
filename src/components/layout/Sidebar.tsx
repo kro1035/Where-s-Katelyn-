@@ -3,7 +3,7 @@ import type { Loan } from '@/types'
 import { formatCurrency } from '@/utils/formatting'
 import { Button } from '@/components/ui/Button'
 
-type Page = 'detail' | 'calculator'
+type Page = 'detail' | 'calculator' | 'schedule'
 
 interface SidebarProps {
   loans: Loan[]
@@ -50,6 +50,23 @@ export function Sidebar({ loans, selectedLoanId, activePage, householdId, onSele
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto p-3">
+        {/* Schedule link */}
+        <div className="mb-3">
+          <button
+            onClick={() => { onNavigate('schedule'); onClose?.() }}
+            className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-center gap-2 ${
+              activePage === 'schedule'
+                ? 'bg-amber-50 text-amber-700'
+                : 'text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-sm font-medium">Daily Schedule</span>
+          </button>
+        </div>
+
         <div className="mb-1">
           <p className="px-2 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">My Loans</p>
           <div className="space-y-0.5">
