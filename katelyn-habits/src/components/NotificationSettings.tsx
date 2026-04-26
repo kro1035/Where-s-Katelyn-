@@ -10,7 +10,7 @@ interface Props {
 export function NotificationSettings({ settings, onChange, onRequestPermission }: Props) {
   const [open, setOpen] = useState(false);
   const [permDenied, setPermDenied] = useState(
-    typeof window !== 'undefined' && Notification.permission === 'denied',
+    typeof Notification !== 'undefined' && Notification.permission === 'denied',
   );
 
   async function handleToggle() {

@@ -20,7 +20,7 @@ async function sendViaServiceWorker(title: string, body: string, icon = '/icon-1
 }
 
 function sendFallbackNotification(title: string, body: string) {
-  if (Notification.permission !== 'granted') return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   new Notification(title, { body });
 }
 
